@@ -96,10 +96,10 @@ def carregar_imagem_url(url):
     imagem_bytes = io.BytesIO(resposta.content)
     return pygame.image.load(imagem_bytes).convert_alpha()
 
-mercurio_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/mercurio.png"),(80,80))
-venus_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/venus.png"),(80,80))
-marte_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/marte.png"),(80,80))
-saturno_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/saturno.png"),(100,80))
+mercurio_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/mercurio.png"),(80,80))
+venus_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/venus.png"),(80,80))
+marte_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/marte.png"),(80,80))
+saturno_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/saturno.png"),(100,80))
 
 imagens_planetas = {
     "Mercúrio": mercurio_img,
