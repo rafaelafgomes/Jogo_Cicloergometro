@@ -107,6 +107,10 @@ imagens_planetas = {
     "Marte": marte_img,
     "Saturno": saturno_img
 }
+    
+#===============Nave============================
+nave_img = pygame.image.load("nave.png").convert_alpha()
+nave_img = pygame.transform.scale(nave_img, (80,50))
 
 #==============Botões======================
 def desenhar_botao(texto, x, y, w, h):
@@ -121,7 +125,7 @@ def clicou(x,y,w,h):
 
 
 
-
+#===============================================
 #==============Loop Principal===================    
 rodando = True
 
@@ -165,11 +169,13 @@ while rodando:
         for i, opcao in enumerate(opcoes):
             cor = (255,255,0) if i == config_opcao else (255,255,255)
 
-            if opcao == "Vel Min":
+            if opcao == "Velocidade Mínima":
                 texto = f"{opcao}: {vel_min:.1f}"
-            elif opcao == "Vel Ideal Max":
+            elif opcao == "Velocidade Ideal Mínima":
+                texto = f"{opcao}: {vel_ideal_min:.1f}"
+            elif opcao == "Velocidade Ideal Máxima":
                 texto = f"{opcao}: {vel_ideal_max:.1f}"
-            elif opcao == "Vel Max":
+            elif opcao == "Velocidade Máxima":
                 texto = f"{opcao}: {vel_max:.1f}"
             elif opcao == "Missão":
                 texto = f"{opcao}: {fases[fase_atual]['nome']}"
@@ -178,25 +184,27 @@ while rodando:
 
         desenhar_botao("VOLTAR", 300, 400, 200, 50)
         
-        #controles
+        #controles das teclas que escolhe o campo para alterar
         if teclas[pygame.K_UP]:
-            config_opcao = (config_opcao - 1) % 4
+            config_opcao = (config_opcao - 1) % len(opcoes)
             pygame.time.delay(150)
 
         if teclas[pygame.K_DOWN]:
-            config_opcao = (config_opcao + 1) % 4
+            config_opcao = (config_opcao + 1) % len(opcoes)
             pygame.time.delay(150)  
             
-        #alterar valores
+        #controle das teclas que altera o valor
         
         if teclas[pygame.K_RIGHT]:
             if config_opcao == 0:
                 vel_min += 0.1
             elif config_opcao == 1:
-                vel_ideal_max += 0.1
+                vel_ideal_min += 0.1
             elif config_opcao == 2:
-                vel_max += 0.1
+                vel_ideal_max += 0.1
             elif config_opcao == 3:
+                vel_max += 0.1
+            elif config_opcao == 4:
                 fase_atual = (fase_atual + 1) % len(fases)
             pygame.time.delay(150)
             
@@ -204,20 +212,20 @@ while rodando:
             if config_opcao == 0:
                 vel_min -= 0.1
             elif config_opcao == 1:
-                vel_ideal_max -= 0.1
+                vel_ideal_min -= 0.1
             elif config_opcao == 2:
-                vel_max -= 0.1
+                vel_ideal_max -= 0.1
             elif config_opcao == 3:
+                vel_max -= 0.1
+            elif config_opcao == 4:
                 fase_atual = (fase_atual - 1) % len(fases)
             pygame.time.delay(150)
             
         # evitar valores inválidos
         vel_min = max(0, vel_min)
-        vel_ideal_max = max(vel_min, vel_ideal_max)
-        vel_max = max(vel_ideal_max, vel_max)
-        
-        # atualizar velocidade ideal automaticamente
-        vel_ideal = (vel_min + vel_ideal_max) / 2
+        vel_ideal_min = max(vel_min, vel_ideal_min)
+        vel_ideal_max = max(vel_ideal_min, vel_ideal_max)
+        vel_max = max(vel_ideal_max, vel_max)       
         
         if clicou(300,400,200,50):
             estado = MENU
@@ -243,7 +251,7 @@ while rodando:
         if velocidade < vel_min:
             status = "Lento"
             cor_status = (255,0,0)
-        elif velocidade <= vel_ideal_max:
+        elif vel_ideal_min <= velocidade <= vel_ideal_max:
             status = "Ideal"
             cor_status = (0,255,0)
         else:
@@ -253,12 +261,14 @@ while rodando:
         # pontuação
         tempo_atual = pygame.time.get_ticks()
         if tempo_atual - tempo_pontos >= 1000:
-            if vel_min <= velocidade <= vel_ideal_max:
+            if vel_ideal_min <= velocidade <= vel_ideal_max:
                 pontuacao += 20
             tempo_pontos = tempo_atual
         
         # progresso
-        progresso += (velocidade / vel_ideal) * (1 / duracao_missao)
+        vel_media_ideal = (vel_ideal_min + vel_ideal_max) / 2
+        tempo_passado = (pygame.time.get_ticks() - tempo_inicio) / 1000
+        progresso = tempo_passado / duracao_missao
         progresso = min(progresso, 1)
         planeta_x = 800 - (progresso * 600)
         
@@ -287,7 +297,14 @@ while rodando:
                 pygame.draw.line(tela,(255,255,255),(linha[0],linha[1]),(linha[0]+linha[2],linha[1]),2)
         
         # nave
-        pygame.draw.rect(tela, (0,255,0), (nave_x, nave_y, 60,30))
+        if velocidade > vel_ideal_max:
+            tamanho = random.randint(15,25)
+            pygame.draw.polygon(tela, (255, random.randint(100,200), 0), [
+                (nave_x, nave_y + 15),
+                (nave_x - 20, nave_y + 10),
+                (nave_x - 20, nave_y + 20)
+            ])
+        tela.blit(nave_img, (nave_x, nave_y))
         
         #planeta
         nome_planeta = fases[fase_atual]["nome"]
@@ -314,13 +331,23 @@ while rodando:
         pygame.draw.rect(tela,(100,100,100),(barra_prog_x,barra_prog_y,barra_prog_largura,barra_prog_altura))
         pygame.draw.rect(tela,(0,0,255),(barra_prog_x,barra_prog_y,progresso*barra_prog_largura,barra_prog_altura))
 
-        # barra velocidade
-        parte = barra_largura/3
-        pygame.draw.rect(tela,(255,0,0),(barra_x,barra_y,parte,barra_altura))
-        pygame.draw.rect(tela,(0,255,0),(barra_x+parte,barra_y,parte,barra_altura))
-        pygame.draw.rect(tela,(255,0,0),(barra_x+2*parte,barra_y,parte,barra_altura))
+        # barra velocidade - proporção
+        prop_min = vel_ideal_min / vel_max
+        prop_ideal = (vel_ideal_max - vel_ideal_min) / vel_max
+        prop_max = (vel_max - vel_ideal_max) / vel_max
+        
+        # barra velocidade - largura
+        largura_min = barra_largura * prop_min
+        largura_ideal = barra_largura * prop_ideal
+        largura_max = barra_largura * prop_max
+        
+        # barra velocidade - desenho
+        pygame.draw.rect(tela,(255,0,0),(barra_x,barra_y,largura_min,barra_altura))
+        pygame.draw.rect(tela,(0,255,0),(barra_x + largura_min,barra_y,largura_ideal,barra_altura))
+        pygame.draw.rect(tela,(255,0,0),(barra_x + largura_min + largura_ideal,barra_y,largura_max,barra_altura))
         posicao = (velocidade / vel_max) * barra_largura
         pygame.draw.rect(tela, (255,255,255), (barra_x + posicao, barra_y - 5, 5, barra_altura + 10))
+        pygame.draw.rect(tela, (255,255,255), (barra_x, barra_y, barra_largura, barra_altura), 2)
     
         # aviso
         if progresso > 0.9:
