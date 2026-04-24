@@ -109,8 +109,7 @@ imagens_planetas = {
 }
     
 #===============Nave============================
-nave_img = pygame.image.load("nave.png").convert_alpha()
-nave_img = pygame.transform.scale(nave_img, (80,50))
+nave_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/nave.png"), (80,50))
 
 #==============Botões======================
 def desenhar_botao(texto, x, y, w, h):
