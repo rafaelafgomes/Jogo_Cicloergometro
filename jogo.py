@@ -13,7 +13,7 @@ clock = pygame.time.Clock()
 
 #===========Estados do Jogo===================
 MENU = "MENU"
-CONFIG = "CONFIGURAÇÕES"
+CONFIGURACAO = "CONFIGURACAO"
 JOGO = "JOGO"
 FIM = "FIM"
 
@@ -143,9 +143,9 @@ while rodando:
     if estado == MENU:
         tela.blit(fonte.render("Pedal Espacial", True, (255,255,0)), (280,100))
         
-        desenhar_botao("INICIAR", 300, 200, 200, 50)
-        desenhar_botao("CONFIG", 300, 280, 200, 50)
-        desenhar_botao("SAIR", 300, 360, 200, 50)
+        desenhar_botao("INICIAR", 300, 200, 220, 50)
+        desenhar_botao("CONFIGURACÕES", 300, 280, 220, 50)
+        desenhar_botao("SAIR", 300, 360, 220, 50)
         
         if clicou(300,200,200,50):
             progresso = 0
@@ -154,12 +154,12 @@ while rodando:
             tempo_inicio = pygame.time.get_ticks()
             estado = JOGO
         if clicou(300,280,200,50):
-            estado = CONFIG
+            estado = CONFIGURACAO
         if clicou(300,360,200,50):
             rodando = False
             
     #================Configuração======================
-    elif estado == CONFIG:
+    elif estado == CONFIGURACAO:
         tela.blit(fonte.render("CONFIGURAÇÕES", True, (255,255,0)), (280,100))
         
         opcoes = ["Velocidade Mínima", "Velocidade Ideal Mínima", "Velocidade Ideal Máxima", "Velocidade Máxima", "Missão"]
