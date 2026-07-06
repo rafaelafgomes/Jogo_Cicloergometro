@@ -10,6 +10,7 @@ tela = pygame.display.set_mode((800, 600))
 pygame.display.set_caption("Jogo Pedal Espacial")
 
 fonte = pygame.font.SysFont(None, 30)
+fonte_titulo = pygame.font.SysFont("arialblack", 55)
 clock = pygame.time.Clock()
 
 #===========Estados do Jogo===================
@@ -28,10 +29,10 @@ vel_max = 5
 config_opcao = 0
 
 fases = [
-    {"nome": "Mercúrio", "distancia": 30},
-    {"nome": "Vênus", "distancia": 30},
-    {"nome": "Marte", "distancia": 30},
-    {"nome": "Saturno", "distancia": 30}
+    {"nome": "Mercúrio", "distancia": 5},
+    {"nome": "Vênus", "distancia": 10},
+    {"nome": "Marte", "distancia": 20},
+    {"nome": "Saturno", "distancia": 15}
 ]
 
 fase_atual = 0
@@ -123,9 +124,22 @@ imagens_planetas = {
 nave_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/nave.png"), (80,50))
 
 #==============Botões======================
-def desenhar_botao(texto, x, y, w, h):
-    pygame.draw.rect(tela, (50,50,50), (x,y,w,h))
-    tela.blit(fonte.render(texto, True, (255,255,255)), (x+20, y+10))
+def desenhar_botao(texto, x, y, w, h, selecionado=False):
+    # Se o botão estiver selecionado (útil para teclado/configurações), muda a cor da borda ou do fundo
+    cor_fundo = cor_fundo = (40, 50, 75) if not selecionado else (60, 80, 120)
+    cor_borda = (0, 255, 255) if selecionado else (100, 100, 100)
+    
+    # Desenha o retângulo do fundo
+    pygame.draw.rect(tela, cor_fundo, (x, y, w, h), border_radius=8) # border_radius deixa os cantos arredondados
+    pygame.draw.rect(tela, cor_borda, (x, y, w, h), 2, border_radius=8) # Borda
+    
+    # Renderiza o texto
+    texto_surf = fonte.render(texto, True, (255, 255, 255))
+    
+    # Centraliza o texto PERFEITAMENTE dentro das coordenadas do botão
+    texto_rect = texto_surf.get_rect(center=(x + w // 2, y + h // 2))
+    
+    tela.blit(texto_surf, texto_rect)
 
 def clicou(x,y,w,h):
     mx, my = pygame.mouse.get_pos()
@@ -148,15 +162,49 @@ while rodando:
             
     teclas = pygame.key.get_pressed()
     
-    tela.fill((0,0,0))
+    # ================== DESENHO DO FUNDO UNIFICADO ==================
+    # 1. Fundo gradiente espacial
+    for y in range(600):
+        cor = int(10 + (y / 600) * 35)
+        pygame.draw.line(tela, (5, 5, cor), (0, y), (800, y))
+        
+    # 2. Desenha as estrelas no menu
+    vel_menu = 0.2 if estado != JOGO else velocidade
+    for estrela in estrelas:
+        estrela[0] -= vel_menu * estrela[2]
+        if estrela[0] < 0:
+            estrela[0] = 800
+            estrela[1] = random.randint(0, 600)
+        brilho = random.randint(150, 225)
+        pygame.draw.circle(tela, (brilho, brilho, brilho), (int(estrela[0]), int(estrela[1])), estrela[3])
     
     #=================Menu===========================
     if estado == MENU:
-        tela.blit(fonte.render("Pedal Espacial", True, (255,255,0)), (280,100))
+        # Título centralizado
+        #efeito de sombra para o titulo (nome do jogo)
+        titulo_sombra = fonte_titulo.render("Pedal Espacial", True, (50, 55, 65))
+        sombra_rect = titulo_sombra.get_rect(center=(403, 103))
+        tela.blit(titulo_sombra, sombra_rect)
         
-        desenhar_botao("INICIAR", 300, 200, 220, 50)
-        desenhar_botao("CONFIGURACÕES", 300, 280, 220, 50)
-        desenhar_botao("SAIR", 300, 360, 220, 50)
+        #Desenha o título principal por cima
+        titulo_surf = fonte_titulo.render("Pedal Espacial", True, (0,255,255))
+        titulo_rect = titulo_surf.get_rect(center=(400, 100))
+        tela.blit(titulo_surf, titulo_rect)
+        
+        # Detecta hover do mouse para acender o botão
+        mx, my = pygame.mouse.get_pos()
+        sel_iniciar = (300 <= mx <= 520 and 200 <= my <= 250)
+        sel_config  = (300 <= mx <= 520 and 280 <= my <= 330)
+        sel_sair    = (300 <= mx <= 520 and 360 <= my <= 410)
+        
+        # Desenha botões com textos perfeitamente alinhados
+        desenhar_botao("INICIAR", 300, 200, 220, 50, selecionado=sel_iniciar)
+        desenhar_botao("CONFIGURAÇÕES", 300, 280, 220, 50, selecionado=sel_config)
+        desenhar_botao("SAIR", 300, 360, 220, 50, selecionado=sel_sair)
+        
+        #Se apertar ESC no Menu Principal, fecha o jogo
+        if teclas[pygame.K_ESCAPE]:
+            rodando = False
         
         if clicou(300,200,200,50):
             progresso = 0
@@ -170,87 +218,137 @@ while rodando:
             ultimo_tempo = pygame.time.get_ticks()
             
             estado = JOGO
+            pygame.time.delay(150)
+            
         if clicou(300,280,200,50):
             estado = CONFIGURACAO
+            pygame.time.delay(150)
+            
         if clicou(300,360,200,50):
             rodando = False
             
     #================Configuração======================
     elif estado == CONFIGURACAO:
-        tela.blit(fonte.render("CONFIGURAÇÕES", True, (255,255,0)), (280,100))
+        ttitulo_surf = fonte.render("CONFIGURAÇÕES DO EXERCÍCIO", True, (255,255,0))
+        titulo_rect = titulo_surf.get_rect(center=(400, 60))
+        tela.blit(titulo_surf, titulo_rect)
         
-        opcoes = ["Velocidade Mínima", "Velocidade Ideal Mínima", "Velocidade Ideal Máxima", "Velocidade Máxima", "Missão"]
+        opcoes = [
+            {"id": 0, "nome": "Velocidade Mínima", "valor": f"{vel_min:.1f}"},
+            {"id": 1, "nome": "Velocidade Ideal Mínima", "valor": f"{vel_ideal_min:.1f}"},
+            {"id": 2, "nome": "Velocidade Ideal Máxima", "valor": f"{vel_ideal_max:.1f}"},
+            {"id": 3, "nome": "Velocidade Máxima", "valor": f"{vel_max:.1f}"},
+            {"id": 4, "nome": "Missão de Destino", "valor": f"{fases[fase_atual]['nome']}"}
+        ]
+        
+        mx, my = pygame.mouse.get_pos()
+        clique_mouse = pygame.mouse.get_pressed()[0]
+        
+       # Variáveis para controlar cliques únicos do mouse (evita disparar o valor)
+        ajuste_valor = 0 # -1 para diminuir, 1 para aumentar
+        opcao_clicada = -1
 
-        # mostrar opções
         for i, opcao in enumerate(opcoes):
-            cor = (255,255,0) if i == config_opcao else (255,255,255)
+            y_pos = 140 + i * 60
+            
+            # Define se a linha está selecionada pelo teclado
+            cor_texto = (0, 255, 255) if i == config_opcao else (255, 255, 255)
+            
+            # Desenha um fundo sutil para a linha se o mouse estiver sobre ela (Hover)
+            if 150 <= mx <= 770 and y_pos <= my <= y_pos + 45:
+                pygame.draw.rect(tela, (30, 40, 65), (150, y_pos, 610, 45), border_radius=6)
+                if clique_mouse and estado == CONFIGURACAO:
+                    config_opcao = i # Muda o foco do teclado para onde o mouse clicou
 
-            if opcao == "Velocidade Mínima":
-                texto = f"{opcao}: {vel_min:.1f}"
-            elif opcao == "Velocidade Ideal Mínima":
-                texto = f"{opcao}: {vel_ideal_min:.1f}"
-            elif opcao == "Velocidade Ideal Máxima":
-                texto = f"{opcao}: {vel_ideal_max:.1f}"
-            elif opcao == "Velocidade Máxima":
-                texto = f"{opcao}: {vel_max:.1f}"
-            elif opcao == "Missão":
-                texto = f"{opcao}: {fases[fase_atual]['nome']}"
+            # Renderiza o nome da opção
+            nome_surf = fonte.render(opcao["nome"], True, cor_texto)
+            tela.blit(nome_surf, (170, y_pos + 10))
+            
+            # Desenha os botões de [-] e [+] para o mouse, ajuste dinamico para o planeta
+            if opcao["id"] == 4:  # Se for a linha da Missão
+                bx_menos, by_menos = 420, y_pos + 5  # Afasta o [-] para a esquerda
+                bx_mais, by_mais = 710, y_pos + 5    # Afasta o [+] para a direita
+                largura_texto_ajuste = 290           # Espaço interno maior para o nome
+            else:  # Se forem as opções com números
+                bx_menos, by_menos = 540, y_pos + 5
+                bx_mais, by_mais = 660, y_pos + 5
+                largura_texto_ajuste = 120
 
-            tela.blit(fonte.render(texto, True, cor), (200, 200 + i*40))
+            b_largura, b_altura = 40, 35
+            
+            # Detecção de hover nos botões de ajuste
+            hover_menos = (bx_menos <= mx <= bx_menos + b_largura and by_menos <= my <= by_menos + b_altura)
+            hover_mais = (bx_mais <= mx <= bx_mais + b_largura and by_mais <= my <= by_mais + b_altura)
+            
+           # Desenha os botões nas posições calculadas
+            desenhar_botao("-", bx_menos, by_menos, b_largura, b_altura, selecionado=hover_menos)
+            desenhar_botao("+", bx_mais, by_mais, b_largura, b_altura, selecionado=hover_mais)
+            
+            # Encontra o meio exato entre o fim do botão [-] e o começo do botão [+]
+            centro_x = (bx_menos + b_largura + bx_mais) // 2
+            
+            valor_surf = fonte.render(opcao["valor"], True, (255, 255, 255))
+            valor_rect = valor_surf.get_rect(center=(centro_x, y_pos + 22))
+            tela.blit(valor_surf, valor_rect)
+            
+            # Captura o clique do mouse nos botões de ajuste
+            if clique_mouse:
+                if hover_menos:
+                    ajuste_valor = -1
+                    opcao_clicada = i
+                elif hover_mais:
+                    ajuste_valor = 1
+                    opcao_clicada = i
 
-        desenhar_botao("VOLTAR", 300, 400, 200, 50)
-        
-        #controles das teclas que escolhe o campo para alterar
+        # Executa a lógica de alteração (Teclado ou cliques no Botão do Mouse)
+        if ajuste_valor != 0:
+            config_opcao = opcao_clicada # Sincroniza o índice
+            
+        # Aplica as mudanças (funciona para os dois métodos)
+        if teclas[pygame.K_RIGHT] or (ajuste_valor == 1):
+            if config_opcao == 0: vel_min += 0.1
+            elif config_opcao == 1: vel_ideal_min += 0.1
+            elif config_opcao == 2: vel_ideal_max += 0.1
+            elif config_opcao == 3: vel_max += 0.1
+            elif config_opcao == 4: fase_atual = (fase_atual + 1) % len(fases)
+            pygame.time.delay(150)
+            
+        if teclas[pygame.K_LEFT] or (ajuste_valor == -1):
+            if config_opcao == 0: vel_min -= 0.1
+            elif config_opcao == 1: vel_ideal_min -= 0.1
+            elif config_opcao == 2: vel_ideal_max -= 0.1
+            elif config_opcao == 3: vel_max -= 0.1
+            elif config_opcao == 4: fase_atual = (fase_atual - 1) % len(fases)
+            pygame.time.delay(150)
+
+        # Movimentação pelas opções via teclado
         if teclas[pygame.K_UP]:
             config_opcao = (config_opcao - 1) % len(opcoes)
             pygame.time.delay(150)
-
         if teclas[pygame.K_DOWN]:
             config_opcao = (config_opcao + 1) % len(opcoes)
             pygame.time.delay(150)  
             
-        #controle das teclas que altera o valor
-        
-        if teclas[pygame.K_RIGHT]:
-            if config_opcao == 0:
-                vel_min += 0.1
-            elif config_opcao == 1:
-                vel_ideal_min += 0.1
-            elif config_opcao == 2:
-                vel_ideal_max += 0.1
-            elif config_opcao == 3:
-                vel_max += 0.1
-            elif config_opcao == 4:
-                fase_atual = (fase_atual + 1) % len(fases)
-            pygame.time.delay(150)
+        if teclas[pygame.K_ESCAPE]:
+            estado = MENU
+            pygame.time.delay(200)
             
-        if teclas[pygame.K_LEFT]:
-            if config_opcao == 0:
-                vel_min -= 0.1
-            elif config_opcao == 1:
-                vel_ideal_min -= 0.1
-            elif config_opcao == 2:
-                vel_ideal_max -= 0.1
-            elif config_opcao == 3:
-                vel_max -= 0.1
-            elif config_opcao == 4:
-                fase_atual = (fase_atual - 1) % len(fases)
-            pygame.time.delay(150)
-            
-        # evitar valores inválidos
+        # Validações de segurança dos limites
         vel_min = max(0, vel_min)
         vel_ideal_min = max(vel_min, vel_ideal_min)
         vel_ideal_max = max(vel_ideal_min, vel_ideal_max)
         vel_max = max(vel_ideal_max, vel_max)       
         
-        if clicou(300,400,200,50):
+        # Botão Voltar
+        sel_voltar = (300 <= mx <= 500 and 480 <= my <= 530)
+        desenhar_botao("VOLTAR", 300, 480, 200, 50, selecionado=sel_voltar)
+        
+        if (sel_voltar and clique_mouse):
             estado = MENU
             pygame.time.delay(200)
     
     #====================Jogo============================
     elif estado == JOGO:
-                
-        teclas = pygame.key.get_pressed()
 
         # controle (simulação pedal)
         if teclas[pygame.K_UP]:
@@ -301,34 +399,38 @@ while rodando:
                 pontuacao += 20
             tempo_pontos = tempo_atual
         
-        # progresso baseado em distância
+        # progresso baseado em distância (SÓ AVANÇA NA ZONA IDEAL)
         tempo_atual = pygame.time.get_ticks()
         delta_tempo = (tempo_atual - ultimo_tempo) / 1000
         ultimo_tempo = tempo_atual
-        # reduz distância conforme pedalada
-        distancia_restante -= velocidade * delta_tempo
+        
+        if status == "Ideal":
+        # Reduz distância normalmente se estiver na velocidade certa
+            distancia_restante -= velocidade * delta_tempo
+        else:
+        # Se estiver "Lento" ou "Rápido", a nave não sai do lugar!
+            pass
+        
         # impede valor negativo
         distancia_restante = max(0, distancia_restante)
         # porcentagem concluída
         progresso = 1 - (distancia_restante / distancia_total)
         # move planeta visualmente
-        nave_x = nave_x_inicial + (
-        progresso * (nave_x_final - nave_x_inicial)
-        )
+        nave_x = nave_x_inicial + (progresso * (nave_x_final - nave_x_inicial))
         
         # fundo gradiente
-        for y in range(600):
-            cor = int(10 + (y/600)*40)
-            pygame.draw.line(tela, (0,0,cor),(0,y),(800,y))
+        #for y in range(600):
+         #   cor = int(10 + (y/600)*40)
+          #  pygame.draw.line(tela, (0,0,cor),(0,y),(800,y))
         
         # estrelas
-        for estrela in estrelas:
-            estrela[0] -= velocidade * estrela[2]
-            if estrela[0] < 0:
-                estrela[0] = 800
-                estrela[1] = random.randint(0, 600)
-            brilho = random.randint(150, 225)
-            pygame.draw.circle(tela, (brilho, brilho, brilho), (int(estrela[0]), int(estrela[1])), estrela[3])
+        #for estrela in estrelas:
+         #   estrela[0] -= velocidade * estrela[2]
+          #  if estrela[0] < 0:
+           #     estrela[0] = 800
+            #    estrela[1] = random.randint(0, 600)
+           # brilho = random.randint(150, 225)
+           # pygame.draw.circle(tela, (brilho, brilho, brilho), (int(estrela[0]), int(estrela[1])), estrela[3])
         
         # linhas velocidade
         if velocidade > vel_ideal_max * 0.8:
@@ -346,11 +448,7 @@ while rodando:
         img = imagens_planetas[nome_planeta]
         largura = img.get_width()
         altura = img.get_height()
-
-        tela.blit(img, (
-            planeta_x - largura // 2,
-            planeta_y - altura // 2
-        ))
+        tela.blit(img, ( planeta_x - largura // 2, planeta_y - altura // 2))
         
         # nave
         tela.blit(nave_img, (nave_x, nave_y))
@@ -365,7 +463,6 @@ while rodando:
         tela.blit(fonte.render(f"Tempo: {minutos}:{segundos:02d}", True,(255,255,255)), (20,60))
         tela.blit(fonte.render(f"Status: {status}", True,cor_status), (550,60))
         tela.blit(fonte.render(f"Destino: {nome_planeta}", True,(255,255,255)), (20,100))
-
         tela.blit(fonte.render(f"Pontos: {pontuacao}", True,(255,255,255)), (550,20))
 
         # barra progresso
@@ -400,10 +497,16 @@ while rodando:
             
     #=========================Fim============================
     elif estado == FIM:
-        tela.blit(fonte.render("MISSÃO CONCLUIDA", True, (255,255,0)), (250,200))
+        titulo_surf = fonte.render("MISSÃO CONCLUÍDA", True, (255,255,0))
+        titulo_rect = titulo_surf.get_rect(center=(400, 200))
+        tela.blit(titulo_surf, titulo_rect)
         
-        desenhar_botao("REINICIAR", 250, 300, 300, 50)
-        desenhar_botao("MENU", 250, 380, 300, 50)
+        mx, my = pygame.mouse.get_pos()
+        sel_reiniciar = (250 <= mx <= 550 and 300 <= my <= 350)
+        sel_menu_fim  = (250 <= mx <= 550 and 380 <= my <= 430)
+        
+        desenhar_botao("REINICIAR", 250, 300, 300, 50, selecionado=sel_reiniciar)
+        desenhar_botao("MENU", 250, 380, 300, 50, selecionado=sel_menu_fim)
         
         if clicou(250,300,300,50): #botão reiniciar
             progresso = 0
