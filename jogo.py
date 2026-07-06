@@ -29,10 +29,10 @@ vel_max = 5
 config_opcao = 0
 
 fases = [
-    {"nome": "Mercúrio", "distancia": 5},
-    {"nome": "Vênus", "distancia": 10},
-    {"nome": "Marte", "distancia": 20},
-    {"nome": "Saturno", "distancia": 15}
+    {"nome": "Mercúrio", "distancia": 600},
+    {"nome": "Vênus", "distancia": 120},
+    {"nome": "Marte", "distancia": 300},
+    {"nome": "Saturno", "distancia": 1000}
 ]
 
 fase_atual = 0
@@ -40,6 +40,13 @@ distancia_total = fases[fase_atual]["distancia"]
 distancia_restante = distancia_total
 
 # ============Jogo============================
+# Controles do multiplicador de bônus
+tempo_na_zona_ideal = 0  # Armazena quantos milissegundos contínuos o jogador está na zona verde
+multiplicador = 1        # Começa em 1x e vira 2x após 30 segundos
+
+# Controle de pausa dentro da partida
+jogo_pausado = False
+
 velocidade = 0
 progresso = 0 #porcentagem da distancia percorrida
 pontuacao = 0
@@ -349,100 +356,127 @@ while rodando:
     
     #====================Jogo============================
     elif estado == JOGO:
-
-        # controle (simulação pedal)
-        if teclas[pygame.K_UP]:
-            velocidade += 0.2
-        if teclas[pygame.K_DOWN]:
-            velocidade -= 0.2
-
-        # movimento suave da nave (efeito flutuar)
+        teclas = pygame.key.get_pressed()
         tempo_atual = pygame.time.get_ticks()
+        mx, my = pygame.mouse.get_pos()
+        clique_mouse = pygame.mouse.get_pressed()[0]
 
-        # muda o comportamento só de vez em quando
-        if tempo_atual - tempo_mudar_movimento > random.randint(1200, 2500):
-            vel_nave_y = random.uniform(-0.25, 0.25)
-            tempo_mudar_movimento = tempo_atual
+        # Atalho no teclado: Apertar ESC pausa ou despausa o jogo
+        if teclas[pygame.K_ESCAPE]:
+            jogo_pausado = not juego_pausado
+         
+        
+        if not jogo_pausado:
+            # controle (simulação pedal)
+            if teclas[pygame.K_UP]:
+                velocidade += 0.2
+            if teclas[pygame.K_DOWN]:
+                velocidade -= 0.2
 
-        # aplica movimento vertical na nave
-        nave_y += vel_nave_y
 
-        # limita o quanto sobe/desce a nave
-        if nave_y < nave_y_base - 8:
-            nave_y = nave_y_base - 8
-            vel_nave_y *= -1
+            # muda o comportamento só de vez em quando
+            if tempo_atual - tempo_mudar_movimento > random.randint(1200, 2500):
+                vel_nave_y = random.uniform(-0.25, 0.25)
+                tempo_mudar_movimento = tempo_atual
 
-        if nave_y > nave_y_base + 8:
-            nave_y = nave_y_base + 8
-            vel_nave_y *= -1
+            # aplica movimento vertical na nave
+            nave_y += vel_nave_y
+
+            # limita o quanto sobe/desce a nave
+            if nave_y < nave_y_base - 8:
+                nave_y = nave_y_base - 8
+                vel_nave_y *= -1
+
+            if nave_y > nave_y_base + 8:
+                nave_y = nave_y_base + 8
+                vel_nave_y *= -1
+            
+            
+            velocidade *= 0.98
+            velocidade = max(0, min(velocidade, vel_max))
         
+            # status
+            if velocidade < vel_min:
+                status = "Lento"
+                cor_status = (255,0,0)
+            elif vel_ideal_min <= velocidade <= vel_ideal_max:
+                status = "Ideal"
+                cor_status = (0,255,0)
+            else:
+                status = "Rápido"
+                cor_status = (255,0,0)
+            
+            # pontuação e bonus
+            if status == "Ideal":
+                # Acumula o tempo contínuo na zona verde (converte delta_tempo para milissegundos)
+                tempo_na_zona_ideal += delta_tempo * 1000
+                
+                # Se mantiver por 30 segundos contínuos, ativa o multiplicador 2x 
+                if tempo_na_zona_ideal >= 30000:
+                    multiplicador = 2
+                else:
+                    multiplicador = 1
+            else:
+                # Se sair da zona ideal (Lento ou Rápido), reseta o contador e o bônus [cite: 48, 50]
+                tempo_na_zona_ideal = 0
+                multiplicador = 1
+            # Concede a pontuação a cada 1 segundo (usando o seu tempo_pontos original)
+            if tempo_atual - tempo_pontos >= 1000:
+                if status == "Ideal":
+                    # Multiplica os 20 pontos base pelo multiplicador ativo (20 ou 40 pontos) 
+                    pontuacao += 10 * multiplicador
+                tempo_pontos = tempo_atual
         
-        velocidade *= 0.98
+            # progresso baseado em distância (SÓ AVANÇA NA ZONA IDEAL)
+            delta_tempo = (tempo_atual - ultimo_tempo) / 1000
+            ultimo_tempo = tempo_atual
         
-        velocidade = max(0, min(velocidade, vel_max))
+            if status == "Ideal":
+            # Reduz distância normalmente se estiver na velocidade certa
+                distancia_restante -= velocidade * delta_tempo
+       
         
-        # status
-        if velocidade < vel_min:
-            status = "Lento"
-            cor_status = (255,0,0)
-        elif vel_ideal_min <= velocidade <= vel_ideal_max:
-            status = "Ideal"
-            cor_status = (0,255,0)
+            # impede valor negativo
+            distancia_restante = max(0, distancia_restante)
+            # porcentagem concluída
+            progresso = 1 - (distancia_restante / distancia_total)
+            # move planeta visualmente
+            nave_x = nave_x_inicial + (progresso * (nave_x_final - nave_x_inicial))
+            
+            # estrelas e linhas se movem normalmente se não estiver pausado
+            for estrela in estrelas:
+                estrela[0] -= velocidade * estrela[2]
+                if estrela[0] < 0:
+                    estrela[0] = 800
+                    estrela[1] = random.randint(0, 600)
+
+            # linhas velocidade
+            if velocidade > vel_ideal_max * 0.8:
+                for linha in linhas_velocidade:
+                    linha[0] -= velocidade * 5
+                    if linha[0] < 0:
+                        linha[0] = 800
+                        linha[1] = random.randint(0,600)
+        
         else:
-            status = "Rápido"
-            cor_status = (255,0,0)
+            # ================= LÓGICA COM O JOGO PAUSADO =================
+            # Quando o jogo está pausado, o delta_tempo precisa continuar atualizando
+            # para a nave não dar um "pulo" na distância quando despausar
+            ultimo_tempo = tempo_atual
+            velocidade = 0 # Para a bike visualmente
+            status = "Pausado"
+            cor_status = (255, 255, 0)
+
+        # ================= RENDERIZAÇÃO GRÁFICA (HUD E ELEMENTOS) =================
+        for estrela in estrelas:
+            brilho = random.randint(150, 225)
+            pygame.draw.circle(tela, (brilho, brilho, brilho), (int(estrela[0]), int(estrela[1])), estrela[3])
         
-        # pontuação
-        tempo_atual = pygame.time.get_ticks()
-        if tempo_atual - tempo_pontos >= 1000:
-            if vel_ideal_min <= velocidade <= vel_ideal_max:
-                pontuacao += 20
-            tempo_pontos = tempo_atual
-        
-        # progresso baseado em distância (SÓ AVANÇA NA ZONA IDEAL)
-        tempo_atual = pygame.time.get_ticks()
-        delta_tempo = (tempo_atual - ultimo_tempo) / 1000
-        ultimo_tempo = tempo_atual
-        
-        if status == "Ideal":
-        # Reduz distância normalmente se estiver na velocidade certa
-            distancia_restante -= velocidade * delta_tempo
-        else:
-        # Se estiver "Lento" ou "Rápido", a nave não sai do lugar!
-            pass
-        
-        # impede valor negativo
-        distancia_restante = max(0, distancia_restante)
-        # porcentagem concluída
-        progresso = 1 - (distancia_restante / distancia_total)
-        # move planeta visualmente
-        nave_x = nave_x_inicial + (progresso * (nave_x_final - nave_x_inicial))
-        
-        # fundo gradiente
-        #for y in range(600):
-         #   cor = int(10 + (y/600)*40)
-          #  pygame.draw.line(tela, (0,0,cor),(0,y),(800,y))
-        
-        # estrelas
-        #for estrela in estrelas:
-         #   estrela[0] -= velocidade * estrela[2]
-          #  if estrela[0] < 0:
-           #     estrela[0] = 800
-            #    estrela[1] = random.randint(0, 600)
-           # brilho = random.randint(150, 225)
-           # pygame.draw.circle(tela, (brilho, brilho, brilho), (int(estrela[0]), int(estrela[1])), estrela[3])
-        
-        # linhas velocidade
-        if velocidade > vel_ideal_max * 0.8:
+        if not jogo_pausado and velocidade > vel_ideal_max * 0.8:
             for linha in linhas_velocidade:
-                linha[0] -= velocidade * 5
-                if linha[0] < 0:
-                    linha[0] = 800
-                    linha[1] = random.randint(0,600)
-
                 pygame.draw.line(tela,(255,255,255),(linha[0],linha[1]),(linha[0]+linha[2],linha[1]),2)
-      
-        
+            
+            
         #planeta
         nome_planeta = fases[fase_atual]["nome"]
         img = imagens_planetas[nome_planeta]
@@ -464,6 +498,14 @@ while rodando:
         tela.blit(fonte.render(f"Status: {status}", True,cor_status), (550,60))
         tela.blit(fonte.render(f"Destino: {nome_planeta}", True,(255,255,255)), (20,100))
         tela.blit(fonte.render(f"Pontos: {pontuacao}", True,(255,255,255)), (550,20))
+        # Se o bônus estiver ativo, mostra um texto piscando ou destacado em amarelo
+        if multiplicador > 1:
+            tela.blit(fonte.render("BÔNUS: 2X!", True, (255, 215, 0)), (550, 40))
+        else:
+            # Mostra o progresso dos segundos restantes para ativar o bônus
+            segundos_restantes = max(0, 30 - int(tempo_na_zona_ideal // 1000))
+            if status == "Ideal" and segundos_restantes > 0:
+                tela.blit(fonte.render(f"Bônus em: {segundos_restantes}s", True, (200, 200, 200)), (550, 40))
 
         # barra progresso
         pygame.draw.rect(tela,(100,100,100),(barra_prog_x,barra_prog_y,barra_prog_largura,barra_prog_altura))
@@ -490,6 +532,46 @@ while rodando:
         # aviso
         if progresso > 0.7:
             tela.blit(fonte.render("Preparando pouso: reduza a velocidade", True,(255,255,0)), (180,200))
+            
+        # Desenha o botão de PAUSA fixo no canto superior direito do HUD para o mouse
+        sel_botao_pausa = (700 <= mx <= 780 and 15 <= my <= 45)
+        desenhar_botao("PAUSA", 700, 15, 80, 30, selecionado=sel_botao_pausa)
+        
+        if sel_botao_pausa and clique_mouse:
+            jogo_pausado = True
+            pygame.time.delay(200)
+
+        # --- MENU DE PAUSA (SOBREPOSIÇÃO) ---
+        if jogo_pausado:
+            # Cria um fundo escurecido sutil para destacar a janela de pausa
+            superficie_foco = pygame.Surface((800, 600), pygame.SRCALPHA)
+            superficie_foco.fill((0, 0, 0, 180)) # Preto com transparência
+            tela.blit(superficie_foco, (0, 0))
+            
+            # Desenha a caixinha do menu de pausa
+            pygame.draw.rect(tela, (25, 35, 55), (250, 180, 300, 220), border_radius=12)
+            pygame.draw.rect(tela, (0, 255, 255), (250, 180, 300, 220), 2, border_radius=12)
+            
+            texto_pausa = fonte.render("SESSÃO PAUSADA", True, (255, 255, 0))
+            tela.blit(texto_pausa, texto_pausa.get_rect(center=(400, 220)))
+            
+            # Botões do Menu de Pausa
+            sel_continuar = (280 <= mx <= 520 and 260 <= my <= 300)
+            sel_sair_partida = (280 <= mx <= 520 and 320 <= my <= 360)
+            
+            desenhar_botao("CONTINUAR", 280, 260, 240, 40, selecionado=sel_continuar)
+            desenhar_botao("ENCERRAR SESSÃO", 280, 320, 240, 40, selecionado=sel_sair_partida)
+            
+            # Ações dos botões
+            if sel_continuar and clique_mouse:
+                jogo_pausado = False
+                ultimo_tempo = pygame.time.get_ticks() # Sincroniza o relógio
+                pygame.time.delay(200)
+                
+            if sel_sair_partida and clique_mouse:
+                jogo_pausado = False
+                estado = MENU # Voltar para a tela inicial com segurança
+                pygame.time.delay(200)
 
         # colisão visual com o planeta
         if progresso >= 1:
