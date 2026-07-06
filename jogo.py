@@ -395,18 +395,23 @@ while rodando:
             velocidade *= 0.98
             velocidade = max(0, min(velocidade, vel_max))
         
-            # status
-            if velocidade < vel_min:
+            #status dinamico: Mantém o limite padrão configurado
+            limite_ideal_min_atual = vel_ideal_min
+            #Se o progresso passar de 70% (reta final), a velocidade baixa vira ideal
+            if progresso > 0.7:
+                limite_ideal_min_atual = 0  # Expandindo a zona verde
+            # Definição do Status baseado nos limites atuais
+            if velocidade < limite_ideal_min_atual:
                 status = "Lento"
-                cor_status = (255,0,0)
-            elif vel_ideal_min <= velocidade <= vel_ideal_max:
+                cor_status = (255, 0, 0)
+            elif limite_ideal_min_atual <= velocidade <= vel_ideal_max:
                 status = "Ideal"
-                cor_status = (0,255,0)
+                cor_status = (0, 255, 0)
             else:
                 status = "Rápido"
-                cor_status = (255,0,0)
+                cor_status = (255, 0, 0)
             
-            # pontuação e bonus
+            # siatema de pontuação e bonus
             if status == "Ideal":
                 # Acumula o tempo contínuo na zona verde (converte delta_tempo para milissegundos)
                 tempo_na_zona_ideal += delta_tempo * 1000
@@ -430,7 +435,6 @@ while rodando:
             # progresso baseado em distância (SÓ AVANÇA NA ZONA IDEAL)
             delta_tempo = (tempo_atual - ultimo_tempo) / 1000
             ultimo_tempo = tempo_atual
-        
             if status == "Ideal":
             # Reduz distância normalmente se estiver na velocidade certa
                 distancia_restante -= velocidade * delta_tempo
@@ -477,12 +481,23 @@ while rodando:
                 pygame.draw.line(tela,(255,255,255),(linha[0],linha[1]),(linha[0]+linha[2],linha[1]),2)
             
             
-        #planeta
+        # ======= EFEITO DE APROXIMAÇÃO DINÂMICA DO PLANETA =======
         nome_planeta = fases[fase_atual]["nome"]
-        img = imagens_planetas[nome_planeta]
-        largura = img.get_width()
-        altura = img.get_height()
-        tela.blit(img, ( planeta_x - largura // 2, planeta_y - altura // 2))
+        img_original = imagens_planetas[nome_planeta]
+        
+        # O planeta começa com 10% do tamanho e cresce até 100% baseado no progresso
+        fator_escala = 0.1 + (progresso * 0.9)
+        
+        # Calcula a nova largura e altura dinamicamente
+        nova_largura = int(img_original.get_width() * fator_escala)
+        nova_altura = int(img_original.get_height() * fator_escala)
+        
+        # Redimensiona a imagem do planeta em tempo real (garantindo tamanho mínimo de 1x1)
+        img_dinamica = pygame.transform.scale(img_original, (max(1, nova_largura), max(1, nova_altura)))
+        
+        # Desenha o planeta centralizado na coordenada dele
+        tela.blit(img_dinamica, (
+            planeta_x - nova_largura // 2, planeta_y - nova_altura // 2))
         
         # nave
         tela.blit(nave_img, (nave_x, nave_y))
@@ -511,23 +526,27 @@ while rodando:
         pygame.draw.rect(tela,(100,100,100),(barra_prog_x,barra_prog_y,barra_prog_largura,barra_prog_altura))
         pygame.draw.rect(tela,(0,0,255),(barra_prog_x,barra_prog_y,progresso*barra_prog_largura,barra_prog_altura))
 
-        # barra velocidade - proporção
-        prop_min = vel_ideal_min / vel_max
-        prop_ideal = (vel_ideal_max - vel_ideal_min) / vel_max
+                            
+        # barra velocidade
+        #proporções usam o limite_ideal_min_atual (que muda se progresso > 0.7)
+        prop_min = limite_ideal_min_atual / vel_max
+        prop_ideal = (vel_ideal_max - limite_ideal_min_atual) / vel_max
         prop_max = (vel_max - vel_ideal_max) / vel_max
-        
         # barra velocidade - largura
         largura_min = barra_largura * prop_min
         largura_ideal = barra_largura * prop_ideal
         largura_max = barra_largura * prop_max
-        
-        # barra velocidade - desenho
-        pygame.draw.rect(tela,(255,0,0),(barra_x,barra_y,largura_min,barra_altura))
-        pygame.draw.rect(tela,(0,255,0),(barra_x + largura_min,barra_y,largura_ideal,barra_altura))
-        pygame.draw.rect(tela,(255,0,0),(barra_x + largura_min + largura_ideal,barra_y,largura_max,barra_altura))
+        # Desenha a zona Baixa/Lenta (só existirá se largura_min > 0)
+        if largura_min > 0:
+            pygame.draw.rect(tela, (255, 0, 0), (barra_x, barra_y, largura_min, barra_altura)) 
+        # Desenha a zona Ideal (Verde) - Ela crescerá para a esquerda na reta final
+        pygame.draw.rect(tela, (0, 255, 0), (barra_x + largura_min, barra_y, largura_ideal, barra_altura))
+        # Desenha a zona Alta/Rápida (Vermelha da direita)
+        pygame.draw.rect(tela, (255, 0, 0), (barra_x + largura_min + largura_ideal, barra_y, largura_max, barra_altura))
+        # Desenha o marcador da velocidade atual e a borda branca
         posicao = (velocidade / vel_max) * barra_largura
-        pygame.draw.rect(tela, (255,255,255), (barra_x + posicao, barra_y - 5, 5, barra_altura + 10))
-        pygame.draw.rect(tela, (255,255,255), (barra_x, barra_y, barra_largura, barra_altura), 2)
+        pygame.draw.rect(tela, (255, 255, 255), (barra_x + posicao, barra_y - 5, 5, barra_altura + 10))
+        pygame.draw.rect(tela, (255, 255, 255), (barra_x, barra_y, barra_largura, barra_altura), 2)
     
         # aviso
         if progresso > 0.7:
