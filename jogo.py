@@ -27,7 +27,29 @@ vel_ideal_min = 2.0
 vel_ideal_max = 3.5
 vel_max = 5
 config_opcao = 0
+usar_obstaculos = True
 
+#================Planetas (Função de Carga) =====================
+def carregar_imagem_url(url):
+    resposta = requests.get(url)
+    resposta.raise_for_status() # identifica erro de link
+    imagem_bytes = io.BytesIO(resposta.content)
+    return pygame.image.load(imagem_bytes).convert_alpha()
+
+#==============Eventos de obstaculos======================
+# Variáveis de controle do tempo
+tempo_ultimo_evento = pygame.time.get_ticks()
+evento_ativo = False
+tempo_inicio_evento = 0
+tipo_evento_atual = None # Pode ser "asteroide", "tempestade" ou "gravidade"
+duracao_evento = 10000   # 10 segundos em milissegundos
+# Controle de animação/efeito visual
+shake_tela = 0
+flash_impacto = 0
+# Lista para o efeito visual das partículas do asteroide
+particulas_asteroide = []
+
+#===================Fases=============================
 fases = [
     {"nome": "Mercúrio", "distancia": 600},
     {"nome": "Vênus", "distancia": 120},
@@ -108,13 +130,7 @@ for i in range(40):
         random.randint(10, 30)
     ])
 
-#================Planetas=====================
-def carregar_imagem_url(url):
-    resposta = requests.get(url)
-    resposta.raise_for_status() #identifica erro de link
-    imagem_bytes = io.BytesIO(resposta.content)
-    return pygame.image.load(imagem_bytes).convert_alpha()
-
+#================Imagens dos Planetas=====================
 mercurio_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/mercurio.png"),(220,220))
 venus_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/venus.png"),(240,240))
 marte_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/marte.png"),(230,230))
@@ -139,13 +155,10 @@ def desenhar_botao(texto, x, y, w, h, selecionado=False):
     # Desenha o retângulo do fundo
     pygame.draw.rect(tela, cor_fundo, (x, y, w, h), border_radius=8) # border_radius deixa os cantos arredondados
     pygame.draw.rect(tela, cor_borda, (x, y, w, h), 2, border_radius=8) # Borda
-    
     # Renderiza o texto
     texto_surf = fonte.render(texto, True, (255, 255, 255))
-    
     # Centraliza o texto PERFEITAMENTE dentro das coordenadas do botão
     texto_rect = texto_surf.get_rect(center=(x + w // 2, y + h // 2))
-    
     tela.blit(texto_surf, texto_rect)
 
 def clicou(x,y,w,h):
@@ -169,7 +182,7 @@ while rodando:
             
     teclas = pygame.key.get_pressed()
     
-    # ================== DESENHO DO FUNDO UNIFICADO ==================
+    # ================== Desenho do fundo unificado ==================
     # 1. Fundo gradiente espacial
     for y in range(600):
         cor = int(10 + (y / 600) * 35)
@@ -213,10 +226,15 @@ while rodando:
         if teclas[pygame.K_ESCAPE]:
             rodando = False
         
-        if clicou(300,200,200,50):
+        if clicou(300,200,220,50):
             progresso = 0
             velocidade = 0
             pontuacao = 0
+            
+            evento_ativo = False
+            tipo_evento_atual = None
+            tempo_ultimo_evento = pygame.time.get_ticks()
+            particulas_asteroide = []
             
             distancia_total = fases[fase_atual]["distancia"]
             distancia_restante = distancia_total
@@ -227,16 +245,16 @@ while rodando:
             estado = JOGO
             pygame.time.delay(150)
             
-        if clicou(300,280,200,50):
+        if clicou(300,280,220,50):
             estado = CONFIGURACAO
             pygame.time.delay(150)
             
-        if clicou(300,360,200,50):
+        if clicou(300,360,220,50):
             rodando = False
             
     #================Configuração======================
     elif estado == CONFIGURACAO:
-        ttitulo_surf = fonte.render("CONFIGURAÇÕES DO EXERCÍCIO", True, (255,255,0))
+        titulo_surf = fonte.render("CONFIGURAÇÕES DO EXERCÍCIO", True, (255,255,0))
         titulo_rect = titulo_surf.get_rect(center=(400, 60))
         tela.blit(titulo_surf, titulo_rect)
         
@@ -245,7 +263,8 @@ while rodando:
             {"id": 1, "nome": "Velocidade Ideal Mínima", "valor": f"{vel_ideal_min:.1f}"},
             {"id": 2, "nome": "Velocidade Ideal Máxima", "valor": f"{vel_ideal_max:.1f}"},
             {"id": 3, "nome": "Velocidade Máxima", "valor": f"{vel_max:.1f}"},
-            {"id": 4, "nome": "Missão de Destino", "valor": f"{fases[fase_atual]['nome']}"}
+            {"id": 4, "nome": "Missão de Destino", "valor": f"{fases[fase_atual]['nome']}"},
+            {"id": 5, "nome": "Obstáculos no Percurso", "valor": "Ligado" if usar_obstaculos else "Desligado"}
         ]
         
         mx, my = pygame.mouse.get_pos()
@@ -272,8 +291,8 @@ while rodando:
             tela.blit(nome_surf, (170, y_pos + 10))
             
             # Desenha os botões de [-] e [+] para o mouse, ajuste dinamico para o planeta
-            if opcao["id"] == 4:  # Se for a linha da Missão
-                bx_menos, by_menos = 420, y_pos + 5  # Afasta o [-] para a esquerda
+            if opcao["id"] == 4 or opcao["id"] == 5:  # Se for a linha da Missão
+                bx_menos, by_menos = 500, y_pos + 5  # Afasta o [-] para a esquerda
                 bx_mais, by_mais = 710, y_pos + 5    # Afasta o [+] para a direita
                 largura_texto_ajuste = 290           # Espaço interno maior para o nome
             else:  # Se forem as opções com números
@@ -318,6 +337,7 @@ while rodando:
             elif config_opcao == 2: vel_ideal_max += 0.1
             elif config_opcao == 3: vel_max += 0.1
             elif config_opcao == 4: fase_atual = (fase_atual + 1) % len(fases)
+            elif config_opcao == 5: usar_obstaculos = not usar_obstaculos # <--- Inverte Liga/Desliga
             pygame.time.delay(150)
             
         if teclas[pygame.K_LEFT] or (ajuste_valor == -1):
@@ -326,6 +346,7 @@ while rodando:
             elif config_opcao == 2: vel_ideal_max -= 0.1
             elif config_opcao == 3: vel_max -= 0.1
             elif config_opcao == 4: fase_atual = (fase_atual - 1) % len(fases)
+            elif config_opcao == 5: usar_obstaculos = not usar_obstaculos # <--- Inverte Liga/Desliga
             pygame.time.delay(150)
 
         # Movimentação pelas opções via teclado
@@ -347,8 +368,8 @@ while rodando:
         vel_max = max(vel_ideal_max, vel_max)       
         
         # Botão Voltar
-        sel_voltar = (300 <= mx <= 500 and 480 <= my <= 530)
-        desenhar_botao("VOLTAR", 300, 480, 200, 50, selecionado=sel_voltar)
+        sel_voltar = (300 <= mx <= 500 and 520 <= my <= 570)
+        desenhar_botao("VOLTAR", 300, 520, 200, 50, selecionado=sel_voltar)
         
         if (sel_voltar and clique_mouse):
             estado = MENU
@@ -364,6 +385,7 @@ while rodando:
         # Atalho no teclado: Apertar ESC pausa ou despausa o jogo
         if teclas[pygame.K_ESCAPE]:
             jogo_pausado = not juego_pausado
+            pygame.time.delay(200)
          
         
         if not jogo_pausado:
@@ -378,7 +400,6 @@ while rodando:
             if tempo_atual - tempo_mudar_movimento > random.randint(1200, 2500):
                 vel_nave_y = random.uniform(-0.25, 0.25)
                 tempo_mudar_movimento = tempo_atual
-
             # aplica movimento vertical na nave
             nave_y += vel_nave_y
 
@@ -391,15 +412,16 @@ while rodando:
                 nave_y = nave_y_base + 8
                 vel_nave_y *= -1
             
-            
+            # Atrito natural para a velocidade decair se parar de pedalar
             velocidade *= 0.98
             velocidade = max(0, min(velocidade, vel_max))
         
+            # ======= Lógica de limites dinamicos =======
             #status dinamico: Mantém o limite padrão configurado
             limite_ideal_min_atual = vel_ideal_min
             #Se o progresso passar de 70% (reta final), a velocidade baixa vira ideal
             if progresso > 0.7:
-                limite_ideal_min_atual = 0  # Expandindo a zona verde
+                limite_ideal_min_atual = 0  # Expandindo a zona verde, desaceleração
             # Definição do Status baseado nos limites atuais
             if velocidade < limite_ideal_min_atual:
                 status = "Lento"
@@ -411,7 +433,10 @@ while rodando:
                 status = "Rápido"
                 cor_status = (255, 0, 0)
             
-            # siatema de pontuação e bonus
+            # ======= Sistema de pontuação e bonus =======
+            delta_tempo = (tempo_atual - ultimo_tempo) / 1000
+            ultimo_tempo = tempo_atual
+            
             if status == "Ideal":
                 # Acumula o tempo contínuo na zona verde (converte delta_tempo para milissegundos)
                 tempo_na_zona_ideal += delta_tempo * 1000
@@ -431,22 +456,71 @@ while rodando:
                     # Multiplica os 20 pontos base pelo multiplicador ativo (20 ou 40 pontos) 
                     pontuacao += 10 * multiplicador
                 tempo_pontos = tempo_atual
-        
-            # progresso baseado em distância (SÓ AVANÇA NA ZONA IDEAL)
-            delta_tempo = (tempo_atual - ultimo_tempo) / 1000
-            ultimo_tempo = tempo_atual
-            if status == "Ideal":
-            # Reduz distância normalmente se estiver na velocidade certa
-                distancia_restante -= velocidade * delta_tempo
+            
+            # ======= Cálculo de avanço da distancia =======
+            # variável para controlar a velocidade real de avanço da nave (SÓ AVANÇA NA ZONA IDEAL)
+                velocidade_avanco = velocidade if status == "Ideal" else 0
        
-        
+            
+            # ======= Sistema de eventos e obstaculos =======
+            if usar_obstaculos:
+                # 1. Disparar novos eventos na jornada (apenas se progresso < 55% e duram 10s)
+                if not evento_ativo and progresso < 0.55:
+                    intervalo_aleatorio = random.randint(30000, 40000) # Entre 30 e 40 segundos
+                    if tempo_atual - tempo_ultimo_evento > intervalo_aleatorio:
+                        evento_ativo = True
+                        tempo_inicio_evento = tempo_atual
+                        # Sorteia entre Asteroide ou Tempestade Espacial
+                        tipo_evento_atual = random.choice(["asteroide", "tempestade"])
+                        
+                # 2. Ativação automática e obrigatória da Gravidade no final, chegada ao planeta
+                if progresso >= 0.7 and tipo_evento_atual != "gravidade" and not evento_ativo:
+                    evento_ativo = True
+                    tempo_inicio_evento = tempo_atual
+                    tipo_evento_atual = "gravidade"
+                
+                # 3. Execução das regras com o evento rodando                
+                if evento_ativo:
+                    # Verifica se o evento de 10 segundos acabou
+                    if tempo_atual - tempo_inicio_evento > duracao_evento: 
+                        #o evento acabou
+                        evento_ativo = False
+                        tipo_evento_atual = None
+                        tempo_ultimo_evento = tempo_atual
+                    else:
+                        # Regra de penalidade durante o evento (asteroide e tempestades)
+                        if tipo_evento_atual in ["asteroide", "tempestade"]:
+                            if status != "Ideal":
+                                # SÓ aplica o dano se o flash_impacto já tiver zerado (evita aplicar o dano em sequência por frame)
+                                if flash_impacto == 0:
+                                    # Pontuação cai pela metade no momento do impacto
+                                    pontuacao = int(pontuacao / 2) # Converte para inteiro para não ficar número quebrado
+                                    # Ativa os efeitos visuais e serve como tempo de imunidade
+                                    flash_impacto = 30 # Aumentamos o tempo do flash para dar um "respiro" ao jogador
+                                    shake_tela = 15    # Chacoalha a nave com um pouco mais de força
+                                # Enquanto o jogador estiver fora do ritmo, a nave continua travada no espaço
+                                velocidade_avanco = 0 
+                        # Se estiver rápido ao chegar no planeta, quase não avança no espaço (Sem conflito no ponteiro)
+                        elif tipo_evento_atual == "gravidade":
+                            if status == "Rápido":
+                                shake_tela = 5
+                                velocidade_avanco = 0.05
+            
+            else:
+                # Se os obstáculos estiverem DESLIGADOS, garante que nenhum evento rode
+                evento_ativo = False
+                tipo_evento_atual = None
+            
+            # ============== Atualiza a distância ================
             # impede valor negativo
+            distancia_restante -= velocidade_avanco * delta_tempo
             distancia_restante = max(0, distancia_restante)
             # porcentagem concluída
             progresso = 1 - (distancia_restante / distancia_total)
             # move planeta visualmente
             nave_x = nave_x_inicial + (progresso * (nave_x_final - nave_x_inicial))
             
+            #============ movimento do cenário de fundo ==================
             # estrelas e linhas se movem normalmente se não estiver pausado
             for estrela in estrelas:
                 estrela[0] -= velocidade * estrela[2]
@@ -462,57 +536,111 @@ while rodando:
                         linha[0] = 800
                         linha[1] = random.randint(0,600)
         
+        # ================= Lógica com o jogo pausado =================
         else:
-            # ================= LÓGICA COM O JOGO PAUSADO =================
-            # Quando o jogo está pausado, o delta_tempo precisa continuar atualizando
-            # para a nave não dar um "pulo" na distância quando despausar
             ultimo_tempo = tempo_atual
-            velocidade = 0 # Para a bike visualmente
+            velocidade = 0 # Para a nave visualmente
             status = "Pausado"
             cor_status = (255, 255, 0)
 
-        # ================= RENDERIZAÇÃO GRÁFICA (HUD E ELEMENTOS) =================
+        # ================================== Renderização gráfica (HUD E elementos) =================
+        #desenha estrelas
         for estrela in estrelas:
             brilho = random.randint(150, 225)
             pygame.draw.circle(tela, (brilho, brilho, brilho), (int(estrela[0]), int(estrela[1])), estrela[3])
         
+        #desenha linhas de velocidade
         if not jogo_pausado and velocidade > vel_ideal_max * 0.8:
             for linha in linhas_velocidade:
                 pygame.draw.line(tela,(255,255,255),(linha[0],linha[1]),(linha[0]+linha[2],linha[1]),2)
             
             
-        # ======= EFEITO DE APROXIMAÇÃO DINÂMICA DO PLANETA =======
+        # ======= Desenho do planeta  e efeito de aproximação dinâmica =======
         nome_planeta = fases[fase_atual]["nome"]
         img_original = imagens_planetas[nome_planeta]
-        
         # O planeta começa com 10% do tamanho e cresce até 100% baseado no progresso
         fator_escala = 0.1 + (progresso * 0.9)
-        
-        # Calcula a nova largura e altura dinamicamente
+         # Calcula a nova largura e altura dinamicamente
         nova_largura = int(img_original.get_width() * fator_escala)
         nova_altura = int(img_original.get_height() * fator_escala)
-        
         # Redimensiona a imagem do planeta em tempo real (garantindo tamanho mínimo de 1x1)
         img_dinamica = pygame.transform.scale(img_original, (max(1, nova_largura), max(1, nova_altura)))
         
-        # Desenha o planeta centralizado na coordenada dele
-        tela.blit(img_dinamica, (
-            planeta_x - nova_largura // 2, planeta_y - nova_altura // 2))
+        # Se o jogo não estiver pausado, calcula o balanço do planeta usando o tempo atual do Pygame
+        if not jogo_pausado:
+            # Multiplicamos o tempo por 0.002 para o balanço ser bem LENTO
+            # Multiplicamos o resultado final por 4 para ele subir e descer no máximo 4 pixels (bem sutil)
+            balanco_planeta_y = math.sin(tempo_atual * 0.002) * 4
+        else:
+            balanco_planeta_y = 0
+
+        # Desenha o planeta centralizado na coordenada dele + o balanço sutil no eixo Y
+        tela.blit(img_dinamica, (planeta_x - nova_largura // 2, (planeta_y + balanco_planeta_y) - nova_altura // 2))
         
-        # nave
-        tela.blit(nave_img, (nave_x, nave_y))
+        # ============== Sistema de tremor por causa do obstáculo =========================
+        # Aplica o tremor na nave se houver colisão ou se estiver no campo gravitacional ruidoso
+        deslocamento_shake = 0
+        if shake_tela > 0:
+            deslocamento_shake = random.randint(-shake_tela, shake_tela)
+            shake_tela -= 1 # Reduz o tremor gradualmente
+            
+        #=============== Visualizaçã física dos obstaculos na tela =========================
+        # Se for um Asteroide e o jogador errar a velocidade, desenha o obstáculo bloqueando a nave!
+        if evento_ativo and tipo_evento_atual == "asteroide":
+            # Se o jogo não estiver pausado, alimenta e move as partículas
+            if not jogo_pausado:
+                # Cria novas partículas vindo da direita continuamente
+                if len(particulas_asteroide) < 25:
+                    particulas_asteroide.append([820,            # X inicial (fora da tela na direita)
+                        random.randint(180, 480),                # Y aleatório na faixa da nave
+                        random.uniform(6, 14),                   # Velocidade horizontal do fragmento
+                        random.randint(2, 6),                    # Tamanho/Diâmetro do ponto
+                        random.choice([(255,80,0), (220,110,20), (130,130,130)]) # Cores quentes e cinza metálico
+                    ])
+
+                # Atualiza a posição de cada partícula
+                for p in particulas_asteroide:
+                    p[0] -= p[2] # Move para a esquerda baseado na velocidade própria dela
+
+                # Remove as partículas que já saíram da tela pela esquerda
+                particulas_asteroide = [p for p in particulas_asteroide if p[0] > -10]
+
+            # DESENHO DAS PARTÍCULAS NA TELA (Roda mesmo pausado para manter o visual estático)
+            for p in particulas_asteroide:
+                # Desenha um efeito sutil de rastro (uma linha horizontal atrás do ponto)
+                pygame.draw.line(tela, p[4], (int(p[0]), int(p[1])), (int(p[0] + p[2]*1.5), int(p[1])), 1)
+                # Desenha o núcleo do fragmento espacial
+                pygame.draw.circle(tela, p[4], (int(p[0]), int(p[1])), p[3])
+
+        # Desenha a nave do jogador
+        tela.blit(nave_img, (nave_x, nave_y + deslocamento_shake))
         
-        # tempo
+        # Efeito visula de flash vermelho na tela em caso de colisão
+        if flash_impacto > 0:
+            superficie_colisao = pygame.Surface((800, 600), pygame.SRCALPHA)
+            superficie_colisao.fill((255, 0, 0, 120)) # Vermelho translúcido
+            tela.blit(superficie_colisao, (0, 0))
+            flash_impacto -= 1
+            
+        # Efeito visual de Nebulosa da Tempestade Espacia, escurece a tela colocando uma camada roxa/azul escura transparente
+        if evento_ativo and tipo_evento_atual == "tempestade":
+            superficie_tempestade = pygame.Surface((800, 600), pygame.SRCALPHA)
+            superficie_tempestade.fill((30, 10, 50, 160)) 
+            tela.blit(superficie_tempestade, (0, 0))
+        
+        
+        # ======= Cronometro da partida =======
         tempo_seg = (pygame.time.get_ticks() - tempo_inicio)//1000
         minutos = tempo_seg//60
         segundos = tempo_seg%60
         
-        # HUD
+        # =========== Textos do HUD =============
         tela.blit(fonte.render(f"Velocidade: {velocidade:.2f}", True,(255,255,255)), (20,20))
         tela.blit(fonte.render(f"Tempo: {minutos}:{segundos:02d}", True,(255,255,255)), (20,60))
         tela.blit(fonte.render(f"Status: {status}", True,cor_status), (550,60))
         tela.blit(fonte.render(f"Destino: {nome_planeta}", True,(255,255,255)), (20,100))
         tela.blit(fonte.render(f"Pontos: {pontuacao}", True,(255,255,255)), (550,20))
+        
         # Se o bônus estiver ativo, mostra um texto piscando ou destacado em amarelo
         if multiplicador > 1:
             tela.blit(fonte.render("BÔNUS: 2X!", True, (255, 215, 0)), (550, 40))
@@ -521,46 +649,73 @@ while rodando:
             segundos_restantes = max(0, 30 - int(tempo_na_zona_ideal // 1000))
             if status == "Ideal" and segundos_restantes > 0:
                 tela.blit(fonte.render(f"Bônus em: {segundos_restantes}s", True, (200, 200, 200)), (550, 40))
+        
+        # ==========Exibição de alertas textuais na tela, se houver um obstáculo por perto, mostra um alerta grande no centro da tela
+        if evento_ativo:
+            if tipo_evento_atual == "asteroide":
+                texto_ev = "ALERTA: CAMPO DE ASTEROIDES! MANTENHA O RITMO!"
+                cor_ev = (255, 100, 0)
+            elif tipo_evento_atual == "tempestade":
+                texto_ev = "ALERTA: TEMPESTADE ESPACIAL! MANTENHA O RITMO!"
+                cor_ev = (200, 0, 255)
+            elif tipo_evento_atual == "gravidade":
+                if status == "Rápido":
+                    texto_ev = "GRAVIDADE DETECTADA! DESACELERE PARA ENTRAR EM ÓRBITA!"
+                    cor_ev = (255, 0, 0)
+                else:
+                    texto_ev = "ENTRANDO EM ÓRBITA COM SUCESSO..."
+                    cor_ev = (0, 255, 0)
+            surf_ev = fonte.render(texto_ev, True, cor_ev)
+            tela.blit(surf_ev, surf_ev.get_rect(center=(400, 150)))
 
-        # barra progresso
+        # ==============Desenhos das barras e botoes e menus ========================
+        # barra progresso da missão
         pygame.draw.rect(tela,(100,100,100),(barra_prog_x,barra_prog_y,barra_prog_largura,barra_prog_altura))
         pygame.draw.rect(tela,(0,0,255),(barra_prog_x,barra_prog_y,progresso*barra_prog_largura,barra_prog_altura))
-
-                            
+          
         # barra velocidade
-        #proporções usam o limite_ideal_min_atual (que muda se progresso > 0.7)
-        prop_min = limite_ideal_min_atual / vel_max
-        prop_ideal = (vel_ideal_max - limite_ideal_min_atual) / vel_max
-        prop_max = (vel_max - vel_ideal_max) / vel_max
+        if limite_ideal_min_atual <= vel_min:
+            prop_min = 0
+            prop_ideal = vel_ideal_max / vel_max
+            prop_max = (vel_max - vel_ideal_max) / vel_max
+        else:
+            prop_min = limite_ideal_min_atual / vel_max
+            prop_ideal = (vel_ideal_max - limite_ideal_min_atual) / vel_max
+            prop_max = (vel_max - vel_ideal_max) / vel_max
+        
         # barra velocidade - largura
         largura_min = barra_largura * prop_min
         largura_ideal = barra_largura * prop_ideal
         largura_max = barra_largura * prop_max
+        
         # Desenha a zona Baixa/Lenta (só existirá se largura_min > 0)
         if largura_min > 0:
             pygame.draw.rect(tela, (255, 0, 0), (barra_x, barra_y, largura_min, barra_altura)) 
+        pygame.draw.rect(tela, (0, 255, 0), (barra_x + largura_min, barra_y, largura_ideal, barra_altura))
+        
+        if largura_max > 0:
+            pygame.draw.rect(tela, (255, 0, 0), (barra_x + largura_min + largura_ideal, barra_y, largura_max, barra_altura)) 
+        
         # Desenha a zona Ideal (Verde) - Ela crescerá para a esquerda na reta final
         pygame.draw.rect(tela, (0, 255, 0), (barra_x + largura_min, barra_y, largura_ideal, barra_altura))
+        
         # Desenha a zona Alta/Rápida (Vermelha da direita)
         pygame.draw.rect(tela, (255, 0, 0), (barra_x + largura_min + largura_ideal, barra_y, largura_max, barra_altura))
+        
         # Desenha o marcador da velocidade atual e a borda branca
         posicao = (velocidade / vel_max) * barra_largura
         pygame.draw.rect(tela, (255, 255, 255), (barra_x + posicao, barra_y - 5, 5, barra_altura + 10))
         pygame.draw.rect(tela, (255, 255, 255), (barra_x, barra_y, barra_largura, barra_altura), 2)
     
-        # aviso
-        if progresso > 0.7:
-            tela.blit(fonte.render("Preparando pouso: reduza a velocidade", True,(255,255,0)), (180,200))
-            
         # Desenha o botão de PAUSA fixo no canto superior direito do HUD para o mouse
         sel_botao_pausa = (700 <= mx <= 780 and 15 <= my <= 45)
         desenhar_botao("PAUSA", 700, 15, 80, 30, selecionado=sel_botao_pausa)
-        
+
         if sel_botao_pausa and clique_mouse:
             jogo_pausado = True
             pygame.time.delay(200)
 
-        # --- MENU DE PAUSA (SOBREPOSIÇÃO) ---
+        # Menu suspenso de pausa
         if jogo_pausado:
             # Cria um fundo escurecido sutil para destacar a janela de pausa
             superficie_foco = pygame.Surface((800, 600), pygame.SRCALPHA)
@@ -592,7 +747,7 @@ while rodando:
                 estado = MENU # Voltar para a tela inicial com segurança
                 pygame.time.delay(200)
 
-        # colisão visual com o planeta
+        # fim, pouso realizado com sucesso
         if progresso >= 1:
             estado = FIM
             
@@ -613,6 +768,12 @@ while rodando:
             progresso = 0
             velocidade = 0
             pontuacao = 0
+            
+            evento_ativo = False
+            tipo_evento_atual = None
+            tempo_ultimo_evento = pygame.time.get_ticks()
+            particulas_asteroide = []
+            
             distancia_total = fases[fase_atual]["distancia"]
             distancia_restante = distancia_total
             tempo_inicio = pygame.time.get_ticks()
