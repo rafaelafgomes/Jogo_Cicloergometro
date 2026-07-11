@@ -24,10 +24,10 @@ FIM = "FIM"
 estado = MENU
 
 #===========Configurações=====================
-vel_min = 1.5
-vel_ideal_min = 2.0 
-vel_ideal_max = 3.5
-vel_max = 5
+vel_min = 20.0       # 20 RPM (Abaixo disso é Muito Lento)
+vel_ideal_min = 40.0 # 40 RPM (Início da zona verde)
+vel_ideal_max = 60.0 # 60 RPM (Fim da zona verde)
+vel_max = 80.0       # 80 RPM (Teto máximo do velocímetro)
 config_opcao = 0
 usar_obstaculos = True
 
@@ -178,6 +178,21 @@ def desenhar_botao(texto, x, y, w, h, selecionado=False):
 def clicou(x,y,w,h):
     mx, my = pygame.mouse.get_pos()
     return x <= mx <= x+w and y <= my <= y+h and pygame.mouse.get_pressed()[0]
+    
+# ======================fluidez de velocidade============================
+def calcular_rpm_suave(rpm_hardware, rpm_antigo):
+    #Filtra as variações bruscas da leitura criando uma transição macia
+    rpm_alvo = max(0.0, min(rpm_hardware, vel_max))
+    return (rpm_antigo * 0.9) + (rpm_alvo * 0.1)
+
+def obter_status_treino(rpm_atual, limite_min):
+    # Mapeia os status comparando RPM com RPM direto
+    if rpm_atual < limite_min:
+        return "Lento", (255, 0, 0)
+    elif limite_min <= rpm_atual <= vel_ideal_max:
+        return "Ideal", (0, 255, 0)
+    else:
+        return "Rápido", (255, 0, 0)
 
 
 # ==============Inicialização da porta serial do Esp32==============
@@ -224,7 +239,7 @@ while rodando:
         pygame.draw.line(tela, (5, 5, cor), (0, y), (800, y))
         
     # 2. Desenha as estrelas no menu
-    vel_menu = 0.2 if estado != JOGO else velocidade
+    vel_menu = 0.2 if estado != JOGO else (velocidade / 15.0)
     for estrela in estrelas:
         estrela[0] -= vel_menu * estrela[2]
         if estrela[0] < 0:
@@ -294,10 +309,10 @@ while rodando:
         tela.blit(titulo_surf, titulo_rect)
         
         opcoes = [
-            {"id": 0, "nome": "Velocidade Mínima", "valor": f"{vel_min:.1f}"},
-            {"id": 1, "nome": "Velocidade Ideal Mínima", "valor": f"{vel_ideal_min:.1f}"},
-            {"id": 2, "nome": "Velocidade Ideal Máxima", "valor": f"{vel_ideal_max:.1f}"},
-            {"id": 3, "nome": "Velocidade Máxima", "valor": f"{vel_max:.1f}"},
+            {"id": 0, "nome": "RPM Mínimo", "valor": f"{vel_min:.0f}"},
+            {"id": 1, "nome": "RPM Ideal Mínimo", "valor": f"{vel_ideal_min:.0f}"},
+            {"id": 2, "nome": "RPM Ideal Máximo", "valor": f"{vel_ideal_max:.0f}"},
+            {"id": 3, "nome": "RPM Máximo", "valor": f"{vel_max:.0f}"},
             {"id": 4, "nome": "Missão de Destino", "valor": f"{fases[fase_atual]['nome']}"},
             {"id": 5, "nome": "Obstáculos no Percurso", "valor": "Ligado" if usar_obstaculos else "Desligado"}
         ]
@@ -329,11 +344,10 @@ while rodando:
             if opcao["id"] == 4 or opcao["id"] == 5:  # Se for a linha da Missão
                 bx_menos, by_menos = 500, y_pos + 5  # Afasta o [-] para a esquerda
                 bx_mais, by_mais = 710, y_pos + 5    # Afasta o [+] para a direita
-                largura_texto_ajuste = 290           # Espaço interno maior para o nome
+
             else:  # Se forem as opções com números
                 bx_menos, by_menos = 540, y_pos + 5
                 bx_mais, by_mais = 660, y_pos + 5
-                largura_texto_ajuste = 120
 
             b_largura, b_altura = 40, 35
             
@@ -361,27 +375,24 @@ while rodando:
                     ajuste_valor = 1
                     opcao_clicada = i
 
-        # Executa a lógica de alteração (Teclado ou cliques no Botão do Mouse)
-        if ajuste_valor != 0:
-            config_opcao = opcao_clicada # Sincroniza o índice
             
         # Aplica as mudanças (funciona para os dois métodos)
         if teclas[pygame.K_RIGHT] or (ajuste_valor == 1):
-            if config_opcao == 0: vel_min += 0.1
-            elif config_opcao == 1: vel_ideal_min += 0.1
-            elif config_opcao == 2: vel_ideal_max += 0.1
-            elif config_opcao == 3: vel_max += 0.1
+            if config_opcao == 0: vel_min += 5
+            elif config_opcao == 1: vel_ideal_min += 5
+            elif config_opcao == 2: vel_ideal_max += 5
+            elif config_opcao == 3: vel_max += 5
             elif config_opcao == 4: fase_atual = (fase_atual + 1) % len(fases)
-            elif config_opcao == 5: usar_obstaculos = not usar_obstaculos # <--- Inverte Liga/Desliga
+            elif config_opcao == 5: usar_obstaculos = not usar_obstaculos 
             pygame.time.delay(150)
             
         if teclas[pygame.K_LEFT] or (ajuste_valor == -1):
-            if config_opcao == 0: vel_min -= 0.1
-            elif config_opcao == 1: vel_ideal_min -= 0.1
-            elif config_opcao == 2: vel_ideal_max -= 0.1
-            elif config_opcao == 3: vel_max -= 0.1
+            if config_opcao == 0: vel_min -= 5
+            elif config_opcao == 1: vel_ideal_min -= 5
+            elif config_opcao == 2: vel_ideal_max -= 5
+            elif config_opcao == 3: vel_max -= 5
             elif config_opcao == 4: fase_atual = (fase_atual - 1) % len(fases)
-            elif config_opcao == 5: usar_obstaculos = not usar_obstaculos # <--- Inverte Liga/Desliga
+            elif config_opcao == 5: usar_obstaculos = not usar_obstaculos 
             pygame.time.delay(150)
 
         # Movimentação pelas opções via teclado
@@ -399,7 +410,6 @@ while rodando:
         # Validações de segurança dos limites
         vel_min = max(0, vel_min)
         vel_ideal_min = max(vel_min, vel_ideal_min)
-        vel_ideal_max = max(vel_ideal_min, vel_ideal_max)
         vel_max = max(vel_ideal_max, vel_max)       
         
         # Botão Voltar
@@ -412,7 +422,6 @@ while rodando:
     
     #====================Jogo============================
     elif estado == JOGO:
-        teclas = pygame.key.get_pressed()
         tempo_atual = pygame.time.get_ticks()
         mx, my = pygame.mouse.get_pos()
         clique_mouse = pygame.mouse.get_pressed()[0]
@@ -435,18 +444,25 @@ while rodando:
                 pass
         
         if not jogo_pausado:
-            # ======= controle de atualização da velocidade pela bike =======
-            if direcao_atual_bike == "TRAS":
-                velocidade = 0  # Para a nave se pedalar para trás
-            else:
-                # Transforma o RPM em velocidade de exibição do jogo (dividido por 15 para encaixar no teto de 5.0)
-                velocidade = rpm_atual_bike / 15.0
+            # ======= controle de atualização da velocidade pela bike =======    
+            rpm_entrada = 0.0 if direcao_atual_bike == "TRAS" else rpm_atual_bike
             
-            # controle (simulação pedal)
-            if teclas[pygame.K_UP]:
-                velocidade += 0.2
-            if teclas[pygame.K_DOWN]:
-                velocidade -= 0.2
+            # Mantém a simulação pelas setas funcionando perfeitamente como Plano B
+            if teclas[pygame.K_UP]: rpm_entrada = vel_ideal_min + 5
+            
+            # 2. SUAVIZAÇÃO DA LEITURA (Adeus trancos!)
+            velocidade = calcular_rpm_suave(rpm_entrada, velocidade)
+            
+            # 3. CÁLCULO DE KM/H EXCLUSIVO PARA O TEXTO DO HUD
+            velocidade_kmh = (velocidade * 3.77) / 100.0
+
+            # 4. CONTROLE DINÂMICO DA ZONA VERDE (Reta final expande)
+            limite_ideal_min_atual = vel_ideal_min
+            if progresso > 0.7:
+                limite_ideal_min_atual = 0  
+                
+            # 5. TESTA STATUS COMPARING RPM WITH RPM DIRECTLY
+            status, cor_status = obter_status_treino(velocidade, limite_ideal_min_atual)
 
 
             # muda o comportamento só de vez em quando
@@ -468,23 +484,6 @@ while rodando:
             # Atrito natural para a velocidade decair se parar de pedalar
             velocidade *= 0.98
             velocidade = max(0, min(velocidade, vel_max))
-        
-            # ======= Lógica de limites dinamicos =======
-            #status dinamico: Mantém o limite padrão configurado
-            limite_ideal_min_atual = vel_ideal_min
-            #Se o progresso passar de 70% (reta final), a velocidade baixa vira ideal
-            if progresso > 0.7:
-                limite_ideal_min_atual = 0  # Expandindo a zona verde, desaceleração
-            # Definição do Status baseado nos limites atuais
-            if velocidade < limite_ideal_min_atual:
-                status = "Lento"
-                cor_status = (255, 0, 0)
-            elif limite_ideal_min_atual <= velocidade <= vel_ideal_max:
-                status = "Ideal"
-                cor_status = (0, 255, 0)
-            else:
-                status = "Rápido"
-                cor_status = (255, 0, 0)
             
             # ======= Sistema de pontuação e bonus =======
             delta_tempo = (tempo_atual - ultimo_tempo) / 1000
@@ -512,7 +511,7 @@ while rodando:
             
             # ======= Cálculo de avanço da distancia =======
             # variável para controlar a velocidade real de avanço da nave (SÓ AVANÇA NA ZONA IDEAL)
-                velocidade_avanco = velocidade if status == "Ideal" else 0
+                velocidade_avanco = (velocidade/15.0) if status == "Ideal" else 0
        
             
             # ======= Sistema de eventos e obstaculos =======
@@ -576,15 +575,15 @@ while rodando:
             #============ movimento do cenário de fundo ==================
             # estrelas e linhas se movem normalmente se não estiver pausado
             for estrela in estrelas:
-                estrela[0] -= velocidade * estrela[2]
+                estrela[0] -= (velocidade/15.0) * estrela[2]
                 if estrela[0] < 0:
                     estrela[0] = 800
                     estrela[1] = random.randint(0, 600)
 
             # linhas velocidade
-            if velocidade > vel_ideal_max * 0.8:
+            if (velocidade/ 15.0) > vel_ideal_max * 0.8:
                 for linha in linhas_velocidade:
-                    linha[0] -= velocidade * 5
+                    linha[0] -= (velocidade / 15.0) * 5
                     if linha[0] < 0:
                         linha[0] = 800
                         linha[1] = random.randint(0,600)
@@ -592,7 +591,6 @@ while rodando:
         # ================= Lógica com o jogo pausado =================
         else:
             ultimo_tempo = tempo_atual
-            velocidade = 0 # Para a nave visualmente
             status = "Pausado"
             cor_status = (255, 255, 0)
 
@@ -603,7 +601,7 @@ while rodando:
             pygame.draw.circle(tela, (brilho, brilho, brilho), (int(estrela[0]), int(estrela[1])), estrela[3])
         
         #desenha linhas de velocidade
-        if not jogo_pausado and velocidade > vel_ideal_max * 0.8:
+        if not jogo_pausado and (velocidade / 15.0) > vel_ideal_max * 0.8:
             for linha in linhas_velocidade:
                 pygame.draw.line(tela,(255,255,255),(linha[0],linha[1]),(linha[0]+linha[2],linha[1]),2)
             
@@ -688,7 +686,8 @@ while rodando:
         segundos = tempo_seg%60
         
         # =========== Textos do HUD =============
-        tela.blit(fonte.render(f"Velocidade: {velocidade:.2f}", True,(255,255,255)), (20,20))
+        tela.blit(fonte.render(f"Velocidade: {velocidade_kmh:.1f} km/h", True,(255,255,255)), (20,20))
+        tela.blit(fonte.render(f"({velocidade:.0f} RPM)", True, (180,180,180)), (230, 20))
         tela.blit(fonte.render(f"Tempo: {minutos}:{segundos:02d}", True,(255,255,255)), (20,60))
         tela.blit(fonte.render(f"Status: {status}", True,cor_status), (550,60))
         tela.blit(fonte.render(f"Destino: {nome_planeta}", True,(255,255,255)), (20,100))
@@ -749,17 +748,12 @@ while rodando:
         if largura_max > 0:
             pygame.draw.rect(tela, (255, 0, 0), (barra_x + largura_min + largura_ideal, barra_y, largura_max, barra_altura)) 
         
-        # Desenha a zona Ideal (Verde) - Ela crescerá para a esquerda na reta final
-        pygame.draw.rect(tela, (0, 255, 0), (barra_x + largura_min, barra_y, largura_ideal, barra_altura))
-        
-        # Desenha a zona Alta/Rápida (Vermelha da direita)
-        pygame.draw.rect(tela, (255, 0, 0), (barra_x + largura_min + largura_ideal, barra_y, largura_max, barra_altura))
+        pygame.draw.rect(tela, (255, 255, 255), (barra_x, barra_y, barra_largura, barra_altura), 2)
         
         # Desenha o marcador da velocidade atual e a borda branca
         posicao = (velocidade / vel_max) * barra_largura
-        pygame.draw.rect(tela, (255, 255, 255), (barra_x + posicao, barra_y - 5, 5, barra_altura + 10))
-        pygame.draw.rect(tela, (255, 255, 255), (barra_x, barra_y, barra_largura, barra_altura), 2)
-    
+        pygame.draw.rect(tela, (255, 255, 255), (barra_x + max(0, min(posicao, barra_largura - 5)), barra_y - 5, 5, barra_altura + 10))
+        
         # Desenha o botão de PAUSA fixo no canto superior direito do HUD para o mouse
         sel_botao_pausa = (700 <= mx <= 780 and 15 <= my <= 45)
         desenhar_botao("PAUSA", 700, 15, 80, 30, selecionado=sel_botao_pausa)
