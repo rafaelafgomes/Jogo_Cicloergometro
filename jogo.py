@@ -3,6 +3,8 @@ import random
 import requests
 import io
 import math
+import serial
+import serial.tools.list_ports #encontra a porta do Esp automaticamente
 
 pygame.init()
 
@@ -30,11 +32,11 @@ config_opcao = 0
 usar_obstaculos = True
 
 #================Planetas (Função de Carga) =====================
-def carregar_imagem_url(url):
-    resposta = requests.get(url)
-    resposta.raise_for_status() # identifica erro de link
-    imagem_bytes = io.BytesIO(resposta.content)
-    return pygame.image.load(imagem_bytes).convert_alpha()
+#def carregar_imagem_url(url):
+ #   resposta = requests.get(url)
+  #  resposta.raise_for_status() # identifica erro de link
+   # imagem_bytes = io.BytesIO(resposta.content)
+    #return pygame.image.load(imagem_bytes).convert_alpha()
 
 #==============Eventos de obstaculos======================
 # Variáveis de controle do tempo
@@ -82,14 +84,17 @@ nave_x_final = 520
 nave_x = nave_x_inicial
 nave_y = 300
 
-#flutuação da nave
+#flutuação da nave e do planeta
 nave_y_base = 300
 nave_y = nave_y_base
 vel_nave_y = 0
 tempo_mudar_movimento = pygame.time.get_ticks()
 
+vel_planeta_y = 0
+tempo_mudar_movimento_planeta = pygame.time.get_ticks()
+planeta_y_base = 300
 planeta_x = 650
-planeta_y = 300
+planeta_y = planeta_y_base
 
 #================Barras=======================
 barra_x = 150
@@ -130,11 +135,23 @@ for i in range(40):
         random.randint(10, 30)
     ])
 
-#================Imagens dos Planetas=====================
-mercurio_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/mercurio.png"),(220,220))
-venus_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/venus.png"),(240,240))
-marte_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/marte.png"),(230,230))
-saturno_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/saturno.png"),(320,220))
+#================Imagens dos Planetas e da Nave=====================
+try:
+    mercurio_img = pygame.transform.scale(pygame.image.load("imagens/mercurio.png").convert_alpha(), (220, 220))
+    venus_img    = pygame.transform.scale(pygame.image.load("imagens/venus.png").convert_alpha(), (240, 240))
+    marte_img    = pygame.transform.scale(pygame.image.load("imagens/marte.png").convert_alpha(), (230, 230))
+    saturno_img  = pygame.transform.scale(pygame.image.load("imagens/saturno.png").convert_alpha(), (320, 220))
+    nave_img     = pygame.transform.scale(pygame.image.load("imagens/nave.png").convert_alpha(), (80, 50))
+except pygame.error as e:
+    print(f"\n[ERRO] Não foi possível carregar as imagens locais! Garanta que os arquivos .png estão na mesma pasta. {e}")
+    pygame.quit()
+    exit()
+
+# mercurio_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/mercurio.png"),(220,220))
+# venus_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/venus.png"),(240,240))
+# marte_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/marte.png"),(230,230))
+# saturno_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/saturno.png"),(320,220))
+# nave_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/nave.png"), (80,50))
 
 imagens_planetas = {
     "Mercúrio": mercurio_img,
@@ -143,9 +160,6 @@ imagens_planetas = {
     "Saturno": saturno_img
 }
     
-#===============Nave============================
-nave_img = pygame.transform.scale(carregar_imagem_url("https://raw.githubusercontent.com/rafaelafgomes/Jogo_Cicloergometro/main/imagens/nave.png"), (80,50))
-
 #==============Botões======================
 def desenhar_botao(texto, x, y, w, h, selecionado=False):
     # Se o botão estiver selecionado (útil para teclado/configurações), muda a cor da borda ou do fundo
@@ -166,6 +180,27 @@ def clicou(x,y,w,h):
     return x <= mx <= x+w and y <= my <= y+h and pygame.mouse.get_pressed()[0]
 
 
+# ==============Inicialização da porta serial do Esp32==============
+esp32 = None
+porta_detectada = None
+
+portas = list(serial.tools.list_ports.comports())
+for p in portas:
+    if "USB" in p.description or "UART" in p.description or "COM" in p.device:
+        porta_detectada = p.device
+        break
+
+if porta_detectada:
+    try:
+        esp32 = serial.Serial(porta_detectada, 115200, timeout=0.01)
+        print(f"[SUCESSO] Conectado ao ESP32 na porta {porta_detectada}")
+    except Exception as e:
+        print(f"[AVISO] Porta {porta_detectada} encontrada, mas falhou ao abrir: {e}")
+else:
+    print("[AVISO] Nenhum ESP32 detectado. O jogo rodará em modo de simulação (Teclado).")
+
+rpm_atual_bike = 0.0
+direcao_atual_bike = "PARADO"
 
 
 
@@ -386,9 +421,27 @@ while rodando:
         if teclas[pygame.K_ESCAPE]:
             jogo_pausado = not juego_pausado
             pygame.time.delay(200)
-         
+        
+        # ==========leitura do Esp32======================
+        if esp32 and esp32.in_waiting > 0:
+            try:
+                linha = esp32.readline().decode('utf-8').strip()
+                if "RPM:" in linha and "," in linha:
+                    partes = linha.split(",")
+                    texto_rpm = partes[0].replace("RPM:", "")
+                    rpm_atual_bike = float(texto_rpm)
+                    direcao_atual_bike = partes[1]
+            except Exception:
+                pass
         
         if not jogo_pausado:
+            # ======= controle de atualização da velocidade pela bike =======
+            if direcao_atual_bike == "TRAS":
+                velocidade = 0  # Para a nave se pedalar para trás
+            else:
+                # Transforma o RPM em velocidade de exibição do jogo (dividido por 15 para encaixar no teto de 5.0)
+                velocidade = rpm_atual_bike / 15.0
+            
             # controle (simulação pedal)
             if teclas[pygame.K_UP]:
                 velocidade += 0.2
@@ -584,7 +637,7 @@ while rodando:
             deslocamento_shake = random.randint(-shake_tela, shake_tela)
             shake_tela -= 1 # Reduz o tremor gradualmente
             
-        #=============== Visualizaçã física dos obstaculos na tela =========================
+        #=============== Sistema da imagem dos obstaculos na tela =========================
         # Se for um Asteroide e o jogador errar a velocidade, desenha o obstáculo bloqueando a nave!
         if evento_ativo and tipo_evento_atual == "asteroide":
             # Se o jogo não estiver pausado, alimenta e move as partículas
