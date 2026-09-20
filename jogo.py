@@ -67,9 +67,9 @@ particulas_asteroide = []
 # =========================================================================
 fases = [
     {"nome": "Mercúrio", "distancia": 30}, #era 600
-    {"nome": "Vênus", "distancia":120}, #era 120
-    {"nome": "Marte", "distancia": 30}, #era 300
-    {"nome": "Saturno", "distancia": 60}, #era 1000
+    {"nome": "Vênus", "distancia":60}, #era 120
+    {"nome": "Marte", "distancia": 90}, #era 300
+    {"nome": "Saturno", "distancia": 120}, #era 1000
 ]
 
 fase_atual = 0
@@ -230,7 +230,7 @@ def carregar_imagens():
     }
     return imagens, img_nave
 
-
+#---------------------------------- Detecção ESP 32 -----------------------------------------------------------------
 def detectar_esp32():
     #Procura uma porta serial compatível e tenta conectar ao ESP32.
     #Retorna o objeto Serial conectado, ou None (o jogo roda em modo de simulação por teclado).
@@ -764,7 +764,13 @@ def tela_jogo(teclas):
 
     # Atalho no teclado: ESC pausa ou despausa o jogo
     if teclas[pygame.K_ESCAPE]:
-        jogo_pausado = not jogo_pausado  # bug corrigido: era "juego_pausado" (causava NameError)
+        jogo_pausado = not jogo_pausado
+        if jogo_pausado:
+            inicio_pausa = pygame.time.get_ticks()
+        else:
+            tempo_pausado += pygame.time.get_ticks() - inicio_pausa
+            ultimo_tempo = pygame.time.get_ticks()
+            limpar_leitura_esp32()
         pygame.time.delay(200)
 
 
@@ -778,7 +784,7 @@ def tela_jogo(teclas):
 
         # Mantém a simulação pelas setas funcionando como plano B
         if teclas[pygame.K_UP]:
-            rpm_entrada = 65 #rpm_ideal_min + 100
+            rpm_entrada = 85 #rpm_ideal_min + 100
 
         velocidade = calcular_rpm_suave(rpm_entrada, velocidade)
         velocidade_kmh = rpm_velocidadekm(circunferencia_roda, velocidade)
@@ -1129,8 +1135,6 @@ def main():
 
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
-                rodando = False
-            if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
                 rodando = False
 
         teclas = pygame.key.get_pressed()
