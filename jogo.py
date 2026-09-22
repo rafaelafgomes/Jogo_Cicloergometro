@@ -144,6 +144,12 @@ nave_img = None
 circunferencia_roda = 0.54
 rpm_max_hardware = 160.0 # teto real do cicloergômetro/sensor
 
+#controle pelo teclado
+rpm_teclado = 0.0
+direcao_teclado = "PARADO"
+aceleracao_teclado = 45.0
+desaceleracao_teclado = 35.0
+
 # =========================================================================
 # =========================================================================
 # ================================ FUNÇÕES =================================
@@ -234,24 +240,29 @@ def carregar_imagens():
 def detectar_esp32():
     #Procura uma porta serial compatível e tenta conectar ao ESP32.
     #Retorna o objeto Serial conectado, ou None (o jogo roda em modo de simulação por teclado).
-    porta_detectada = None
+    
     for p in serial.tools.list_ports.comports():
-        if "USB" in p.description or "UART" in p.description or "COM" in p.device:
-            porta_detectada = p.device
-            break
+        
+        descricao = (p.description or "").upper()
+        fabricante = (p.manufacturer or "").upper()
 
-    if not porta_detectada:
-        print("[AVISO] Nenhum ESP32 detectado. O jogo rodará em modo de simulação (Teclado).")
-        return None
+        print("PORTA:", p.device)
+        print("DESCRIÇÃO:", p.description)
+        print("FABRICANTE:", p.manufacturer)
+        print("-------------------------")
+        
+        # Procura especificamente características do ESP32
+        if "USB JTAG" in descricao or "ESP32" in descricao:
+            try:
+                conexao = serial.Serial(p.device, 115200, timeout=0.01)
+                print(f"[SUCESSO] Conectado ao ESP32 na porta {p.device}")
+                return conexao
+           
+            except Exception as e:
+                print(f"[AVISO] Porta {p.device} encontrada, mas falhou ao abrir: {e}")
 
-    try:
-        conexao = serial.Serial(porta_detectada, 115200, timeout=0.01)
-        print(f"[SUCESSO] Conectado ao ESP32 na porta {porta_detectada}")
-        return conexao
-    except Exception as e:
-        print(f"[AVISO] Porta {porta_detectada} encontrada, mas falhou ao abrir: {e}")
-        return None
-
+    print("[AVISO] Nenhum ESP32 detectado. O jogo rodará em modo de simulação (Teclado).")
+    return None
 
 def ler_esp32():
     #Lê uma linha da serial do ESP32 (se houver dado disponível) e atualiza a RPM/direção lidas.
@@ -756,7 +767,7 @@ def tela_jogo(teclas):
     global tempo_pontos, pontuacao, ultimo_tempo, tempo_final
     global evento_ativo, tipo_evento_atual, tempo_inicio_evento, tempo_ultimo_evento
     global flash_impacto, shake_tela, particulas_asteroide
-    global animacao_chegada, tempo_pausado, inicio_pausa
+    global animacao_chegada, tempo_pausado, inicio_pausa, direcao_atual_bike, rpm_entrada
 
     tempo_atual = pygame.time.get_ticks()
     mx, my = pygame.mouse.get_pos()
@@ -775,18 +786,36 @@ def tela_jogo(teclas):
 
 
     if not jogo_pausado and not animacao_chegada:
-        ler_esp32()
-        # ======= controle de atualização da velocidade pela bike =======
-        if direcao_atual_bike == "TRAS":
-            rpm_entrada = 0.0
+        rpm_entrada = 0.0
+        esp32 = detectar_esp32()
+        if esp32 is None:
+            # Simulação pelo teclado 
+            if teclas[pygame.K_UP]:
+                velocidade += 2
+                direcao_atual_bike = "FRENTE"
+                
+                if velocidade > rpm_max_hardware:
+                    velocidade = rpm_max_hardware
+                
+            elif teclas[pygame.K_DOWN]:
+                direcao_atual_bike = "TRAS"
+                velocidade = 0.0
+             
+            else:
+                direcao_atual_bike = "PARADO"
+                velocidade *= 0.98
+            
         else:
-            rpm_entrada = rpm_atual_bike
-
-        # Mantém a simulação pelas setas funcionando como plano B
-        if teclas[pygame.K_UP]:
-            rpm_entrada = 85 #rpm_ideal_min + 100
-
-        velocidade = calcular_rpm_suave(rpm_entrada, velocidade)
+            ler_esp32()
+            # controle de atualização da velocidade pela bike
+            if direcao_atual_bike == "TRAS":
+                rpm_entrada = 0.0
+            else:
+                rpm_entrada = rpm_atual_bike
+                
+        
+            velocidade = calcular_rpm_suave(rpm_entrada, velocidade)
+        
         velocidade_kmh = rpm_velocidadekm(circunferencia_roda, velocidade)
 
         # Controle dinâmico da zona verde (reta final expande a zona ideal)
@@ -809,7 +838,6 @@ def tela_jogo(teclas):
             vel_nave_y *= -1
 
         # Atrito natural: velocidade decai se parar de pedalar <<<<< essa parte está fazendo a velocidade travar
-        velocidade *= 0.98
         velocidade = max(0, min(velocidade, rpm_max_hardware))
 
         # ======= Sistema de pontuação e bônus =======
